@@ -60,6 +60,7 @@ public class GenerateSqlMojo extends AbstractGenerateSql {
          */
         private File sqlScriptsDirectory;
         
+        @Override
         public void execute() throws MojoExecutionException, MojoFailureException {
                 doExecute(sqlScriptsDirectory, outputDirectory);
         }
