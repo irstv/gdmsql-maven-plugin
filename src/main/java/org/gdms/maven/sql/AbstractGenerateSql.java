@@ -45,6 +45,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 
 import org.gdms.sql.engine.Engine;
+import org.gdms.sql.engine.ParseException;
 import org.gdms.sql.engine.SQLScript;
 
 /**
@@ -60,7 +61,7 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                 try {
                         final String inputPath = sqlScriptsDirectory.getAbsolutePath();
 
-                        getLog().info(String.format("Processing folder '%s'.", inputPath));
+                        getLog().info(String.format("Processing folder %s", inputPath));
                         if (!sqlScriptsDirectory.exists()) {
                                 // nothing to do, no valid input directory
                                 getLog().warn("Directory does not exist! Nothing to do.");
@@ -74,27 +75,36 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                                 // nothing to do, no files...
                                 getLog().warn("Found 0 sql files! Nothing to do.");
                         } else {
-                                getLog().info(String.format("Compiling %d sql files to '%s'",
+                                getLog().info(String.format("Compiling %d sql files to %s",
                                         size, outputDirectory.getAbsolutePath()));
 
                                 // be sure the output dir exists
                                 if (!outputDirectory.exists()) {
                                         outputDirectory.mkdirs();
                                 }
-                                
-                                boolean errors = false;
+
+                                int errors = 0;
 
                                 for (File ff : fil) {
                                         SQLScript s;
                                         try {
                                                 s = Engine.parseScript(ff);
                                         } catch (Exception e) {
-                                                // error reporting could be improved here...
-                                                errors = true;
-                                                getLog().error(String.format(
-                                                        "Failed to compile script '%s':", ff.getAbsolutePath()));
+                                                if (errors == 0) {
+                                                        getLog().info("---------------------------------------");
+                                                        getLog().error("COMPILATION ERROR :");
+                                                        getLog().info("---------------------------------------");
+                                                }
+                                                errors++;
                                                 getLog().error(e.getLocalizedMessage());
+                                                getLog().info(String.format(
+                                                        "location:  %s", ff.getAbsolutePath()));
+                                                if (e instanceof ParseException) {
+                                                        ParseException p = (ParseException) e;
+                                                        getLog().info(p.getLocation().prettyPrint());
+                                                }
                                                 getLog().debug(e);
+                                                getLog().info("---------------------------------------");
                                                 continue;
                                         }
 
@@ -121,10 +131,16 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                                                         "Error while saving to '%s'", targetFile.getAbsolutePath()), ex);
                                         }
                                 }
-                                
-                                if (errors) {
-                                        throw new MojoFailureException(
-                                                "There were build errors! See above for more details.");
+
+                                if (errors != 0) {
+                                        getLog().info(String.format("%d errors", errors));
+                                        String errorStr;
+                                        if (errors == 1) {
+                                                errorStr = "There was 1 SQL build error!";
+                                        } else {
+                                                errorStr = String.format("There were %d SQL build errors!", errors);
+                                        }
+                                        throw new MojoFailureException(errorStr + " See above for more details.");
                                 }
                         }
                 } finally {
