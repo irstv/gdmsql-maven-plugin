@@ -37,13 +37,16 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Properties;
 
 import com.pyx4j.log4j.MavenLogAppender;
 import org.apache.commons.io.FileUtils;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.logging.Log;
 
+import org.gdms.data.DataSourceFactory;
 import org.gdms.sql.engine.Engine;
 import org.gdms.sql.engine.ParseException;
 import org.gdms.sql.engine.SQLScript;
@@ -54,6 +57,13 @@ import org.gdms.sql.engine.SQLScript;
  * @author Antoine Gourlay
  */
 abstract class AbstractGenerateSql extends AbstractMojo {
+
+        /**
+         * Properties to pass to the Gdms SQL Engine.
+         * @parameter
+         * @optional
+         */
+        protected Properties engineProperties;
 
         protected void doExecute(File sqlScriptsDirectory, File outputDirectory) throws MojoExecutionException, MojoFailureException {
                 MavenLogAppender.startPluginLog(this);
@@ -83,12 +93,38 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                                         outputDirectory.mkdirs();
                                 }
 
+                                Properties props = DataSourceFactory.getDefaultProperties();
+
+                                if (engineProperties != null) {
+                                        props = new Properties(props);
+                                        for (String k : engineProperties.stringPropertyNames()) {
+                                                props.setProperty(k, engineProperties.getProperty(k));
+                                        }
+                                }
+
+                                if (getLog().isDebugEnabled()) {
+                                        // display properties
+                                        Log log = getLog();
+                                        log.debug("Engine invocation properties:");
+                                        if (engineProperties == null) {
+                                                log.debug("No custom properties. Using Default:");
+                                        } else {
+                                                log.debug("Custom properties:");
+                                                printProperties(engineProperties);
+                                                log.debug("Merged with default properties:");
+                                        }
+                                        printProperties(props);
+                                }
+
                                 int errors = 0;
 
                                 for (File ff : fil) {
+                                        if (getLog().isDebugEnabled()) {
+                                                getLog().debug("Parsing script " + ff.getAbsolutePath());
+                                        }
                                         SQLScript s;
                                         try {
-                                                s = Engine.parseScript(ff);
+                                                s = Engine.parseScript(ff, props);
                                         } catch (Exception e) {
                                                 if (errors == 0) {
                                                         getLog().info("---------------------------------------");
@@ -146,5 +182,14 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                 } finally {
                         MavenLogAppender.endPluginLog(this);
                 }
+        }
+
+        private void printProperties(Properties p) {
+                Log log = getLog();
+                log.debug(" {");
+                for (String key : p.stringPropertyNames()) {
+                        log.debug("  " + key + " = " + p.getProperty(key));
+                }
+                log.debug(" }");
         }
 }
