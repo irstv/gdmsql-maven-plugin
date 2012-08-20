@@ -36,7 +36,9 @@ package org.gdms.maven.sql;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 import com.pyx4j.log4j.MavenLogAppender;
@@ -85,12 +87,28 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                                 // nothing to do, no files...
                                 getLog().warn("Found 0 sql files! Nothing to do.");
                         } else {
-                                getLog().info(String.format("Compiling %d sql files to %s",
-                                        size, outputDirectory.getAbsolutePath()));
-
                                 // be sure the output dir exists
                                 if (!outputDirectory.exists()) {
                                         outputDirectory.mkdirs();
+                                }
+
+                                List<File> changedFiles = new ArrayList<File>();
+
+                                for (File ff : fil) {
+                                        File tff = getTargetFile(inputPath, outputDirectory, ff);
+                                        if (!tff.exists() || FileUtils.isFileNewer(ff, tff)) {
+                                                changedFiles.add(ff);
+                                        }
+                                }
+
+                                if (changedFiles.isEmpty()) {
+                                        getLog().info("Nothing to compile - all compiled scripts are up to date");
+                                } else if (changedFiles.size() != size) {
+                                        getLog().info(String.format("Compiling %d changed sql files out of %d to %s",
+                                                changedFiles.size(), size, outputDirectory.getAbsolutePath()));
+                                } else {
+                                        getLog().info(String.format("Compiling %d sql files to %s",
+                                                size, outputDirectory.getAbsolutePath()));
                                 }
 
                                 Properties props = DataSourceFactory.getDefaultProperties();
@@ -118,7 +136,7 @@ abstract class AbstractGenerateSql extends AbstractMojo {
 
                                 int errors = 0;
 
-                                for (File ff : fil) {
+                                for (File ff : changedFiles) {
                                         if (getLog().isDebugEnabled()) {
                                                 getLog().debug("Parsing script " + ff.getAbsolutePath());
                                         }
@@ -143,18 +161,12 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                                                 getLog().info("---------------------------------------");
                                                 continue;
                                         }
+                                        File targetFile = getTargetFile(inputPath, outputDirectory, ff);
 
-                                        String oldpath = ff.getParentFile().getAbsolutePath();
-                                        String localpath = oldpath.substring(inputPath.length());
-
-                                        File targetDir = new File(outputDirectory, localpath);
-                                        targetDir.mkdirs();
-
-                                        final String fName = ff.getName();
-                                        File targetFile = new File(targetDir, fName.substring(0, fName.length() - 3) + "bsql");
+                                        // create parent directory. Might not exist
+                                        targetFile.getParentFile().mkdirs();
 
                                         // delete existing compiled script
-                                        // maybe we could check if the input script changed before doing anything...
                                         if (targetFile.exists()) {
                                                 targetFile.delete();
                                         }
@@ -182,6 +194,17 @@ abstract class AbstractGenerateSql extends AbstractMojo {
                 } finally {
                         MavenLogAppender.endPluginLog(this);
                 }
+        }
+
+        private File getTargetFile(String inputPath, File outputDirectory, File sourceFile) {
+                String oldpath = sourceFile.getParentFile().getAbsolutePath();
+                String localpath = oldpath.substring(inputPath.length());
+
+                File targetDir = new File(outputDirectory, localpath);
+
+                final String fName = sourceFile.getName();
+
+                return new File(targetDir, fName.substring(0, fName.length() - 3) + "bsql");
         }
 
         private void printProperties(Properties p) {
